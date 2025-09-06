@@ -1,0 +1,14 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "scripts": {
+    "start": "echo 'Frontend dev server not used in Docker'",
+    "build": "npx babel src --out-dir build && cp -r public/* build/"
+  }
+}
+
