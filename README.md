@@ -53,7 +53,7 @@ WARN[0000] /home/redhat/Knovator/docker-compose.yml: the attribute `version` is 
  => [backend stage-1 3/3] COPY --from=build /app .                                                                                                                                                       0.2s
  => [backend] exporting to image                  
 
- 
+
 ```
 ```
 redhat@vikas:~/Knovator$ docker ps
@@ -82,5 +82,180 @@ redhat@vikas:~/Knovator$ curl http://localhost
     <div id="root"></div>
   </body>
 </html>
+
+```
+# ===================================================================================================================#
+
+# Step 2: I have used the jenkins CI/CD:   
+```
+===============       =================       ===================
+│   Developer │       │    Jenkins    │       │  Docker Registry│
+│(Push Code/git) │───▶│  (Self-hosted │──────▶│ (DockerHub /   |
+================       │   Runner VM)  │       │  Private Repo/jfrog) │
+                      =================       =====================
+                              │
+                              │ (SSH with Key)
+                              ▼
+                       =================
+                       │ Deployment   │
+                       │   Server VM  │
+                       │ (Docker +    │
+                       │ docker-compose) │
+                       =====================
+                               │
+                               ▼
+                      ====================
+                        │   End User  │
+                        │ (Access via │
+                        │   Browser)  │
+                     =====================
+
+
+
+
+
+```
+# Lets make it more secure  jenkins CI/CD:
+
+```
+                        ==================
+                        │ Developer   │
+                        │ (Push Code) │
+                      =====================
+                                │ HTTPS (TLS)
+                                ▼
+                      ==========================
+                        │ Git Provider     │
+                        │ (GitHub/GitLab) │
+                      ======================
+                                 │ Webhook (HTTPS + Secret)
+                                 ▼
+                      ==========================================
+                        │   Jenkins Server (Self-hosted VM)  │
+                        │────────────────────────────────────│
+                        │  - RBAC Enabled (Admin/User roles) │
+                        │  - Credentials Vault (SSH, Tokens) │
+                        │  - HTTPS Reverse Proxy (Nginx+SSL) │
+                        │  - Security Plugins (OWASP, Audit) │
+                        │  - Runs Builds in Isolated Agents  │
+                    ==============================================
+                                        │
+                                        │ Docker Build (isolated network)
+                                        ▼
+                  ==============================================
+                              │ Docker Registry   │
+                              │ (DockerHub/ECR)  │
+                              │ - Private Repo   │
+                              │ - Access via     │
+                              │   Jenkins Token  │
+                  ========================================
+                                        │
+                                  Encrypted Pull (TLS)
+                                        │
+                                        ▼
+                          ===================================
+                             │ Deployment VM (Server)   │
+                             │──────────────────────────│
+                             │ - Docker + Compose       │
+                             │ - Only SSH key access    │
+                             │ - Firewall rules enabled │
+                             │ - Runs frontend/backend  │
+                             │   behind Nginx reverse   │
+                             │   proxy (HTTPS, WAF)     │
+                             │ - Logs to monitoring     │
+                          ===================================
+                                         │
+                                         ▼
+                                 =======================
+                                  │   End User  │
+                                  │ (Browser)   │
+                                =======================
+
+```
+
+# Lets explain above layers:
+
+* Key Security Layers
+
+## Jenkins Security
+
+* Set up  (RBAC) so that admins and developers don’t share the same level of permissions.
+
+* Keep all passwords, tokens, and SSH keys inside Jenkins Credentials Manager instead of hardcoding them in pipelines.
+
+* Put Jenkins behind an Nginx reverse proxy and enable SSL/TLS certificates to secure web access.
+
+## Pipeline Security
+
+* Allow Jenkins to pull code only from trusted Git repositories.
+
+* Make sure the build process runs inside isolated Docker agents so that builds don’t interfere with Jenkins itself.
+
+* Run an image vulnerability scan (using tools like Trivy or Anchore) before pushing or deploying the image.
+
+## Registry Security
+
+* Use a private Docker registry so images aren’t publicly exposed.
+
+* Configure authentication with tokens/credentials stored in Jenkins.
+
+* Enable Docker Content Trust or another method of image signing so you know the images haven’t been tampered with.
+
+## Deployment Security
+
+* Only allow access to the deployment server using SSH keys (no password login).
+
+* Always run containers as a non-root user inside Docker for safety.
+
+* Protect services with Nginx (HTTPS) and set up a firewall (UFW or iptables) to restrict open ports.
+
+* Forward logs to a monitoring stack like ELK or Prometheus for visibility and auditing.
+
+
+## User Security
+
+* End users should only connect to the application through HTTPS.
+
+* For extra protection, consider adding a Web Application Firewall (WAF) in front of Nginx.
+
+# ===================================================================================================================#
+
+# Steps 3: 
+
+```
+                    (Internet)
+                         |
+                    CDN/WAF (Cloudflare/ALB + WAF)
+                          |
+                    =================
+                    │ Load Balancer│  <-- TLS termination possible here
+                    =================
+                               |
+                               |
+                    ================================================
+                    │                     │
+                    Web / Nginx (reverse)        Web / Nginx (reverse)
+                    + Static (cacheable)          + Static (cacheable)
+                    │                     │
+                  ==============================
+                                    │
+                                    |
+                    PHP/FPM (containers/pods)  <-- horizontal scale(HPA)
+                                    │
+                    Queue workers (Laravel queue + Horizon)  <-- scale separately
+                                │
+                    ==============================
+                    │   Shared Services      │
+                    │ ========  ============     ===========
+                    │ │Redis│    │MySQL│       │Elastic │
+                    │ │(cache,│  │(primary│    │Search  │
+                    │ │session)│ │+ replica)│ │cluster)│
+                    │ =========  =============   ============
+                  ====================================
+
+                    Logging/Monitoring: ELK / Prometheus+Grafana, centralized
+                    Secrets: Vault / Cloud KMS / Jenkins credentials
+                    CI/CD: GitHub Actions / Jenkins => build images => deploy to cluster
+                    Backups: Managed snapshots for DB, daily/weekly retention
 
 ```
